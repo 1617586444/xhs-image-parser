@@ -1,0 +1,13 @@
+{
+  "name": "xhs-image-parser-cf",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev"
+  },
+  "devDependencies": {
+    "@cloudflare/containers": "^0.0.21",
+    "wrangler": "^4.46.0"
+  }
+}

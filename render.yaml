@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: xhs-image-parser
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: XHS_BROWSER_PROFILE_DIR
+        value: /tmp/xhs_browser_profile

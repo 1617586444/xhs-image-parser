@@ -1,0 +1,14 @@
+.venv
+.venv.*
+__pycache__
+*.pyc
+data
+.wrangler
+.wrangler-dry-run
+.tools
+node_modules
+server.*.log
+tunnel.*.log
+debug-xhs.png
+.github
+tests

@@ -1,0 +1,15 @@
+[project]
+name = "xhs-image-parser"
+version = "0.1.0"
+description = "Standalone Xiaohongshu note image parser API."
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115.0",
+  "httpx>=0.27.0",
+  "playwright>=1.46.0",
+  "uvicorn>=0.30.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
