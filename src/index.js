@@ -352,7 +352,22 @@ function indexHtml() {
     .actions { display: flex; gap: 8px; padding: 10px; flex-wrap: wrap; }
     .actions a { padding: 0 12px; min-height: 36px; border-radius: 8px; word-break: normal; }
     .actions .open { background: transparent; color: #7de8ff; border: 1px solid #24415f; }
+    .history { margin-top: 18px; padding: 16px; background: #0d1a2e; border: 1px solid #24415f; border-radius: 12px; }
+    .history-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+    .history h2 { margin: 0; font-size: 18px; }
+    .history-list { display: grid; gap: 8px; }
+    .history-empty { margin: 0; color: #95a9bf; }
+    .history-item { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 10px; background: #07111f; border: 1px solid #1f3854; border-radius: 10px; }
+    .history-title { margin: 0 0 4px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .history-meta { margin: 0; color: #95a9bf; font-size: 13px; }
+    .history-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    .ghost { background: transparent; color: #7de8ff; border: 1px solid #24415f; }
+    .danger { background: transparent; color: #ffb1ba; border: 1px solid rgba(255, 107, 125, .4); }
     .error { margin-top: 16px; padding: 12px; color: #ffb1ba; background: rgba(255, 107, 125, .12); border: 1px solid rgba(255, 107, 125, .3); border-radius: 10px; }
+    @media (max-width: 640px) {
+      .history-item { grid-template-columns: 1fr; }
+      .history-actions { justify-content: flex-start; }
+    }
   </style>
 </head>
 <body>
@@ -362,13 +377,25 @@ function indexHtml() {
       <textarea id="text" placeholder="粘贴小红书分享文本或链接"></textarea>
       <button id="submit" type="submit">解析图片</button>
     </form>
+    <section class="history">
+      <div class="history-head">
+        <h2>历史解析</h2>
+        <button id="clearHistory" class="danger" type="button">清空历史</button>
+      </div>
+      <div id="historyList" class="history-list"></div>
+    </section>
     <section id="result"></section>
   </main>
   <script>
+    const HISTORY_KEY = 'xhs_static_parse_history_v1';
+    const HISTORY_LIMIT = 30;
     const form = document.getElementById('form');
     const text = document.getElementById('text');
     const result = document.getElementById('result');
     const submit = document.getElementById('submit');
+    const historyList = document.getElementById('historyList');
+    const clearHistory = document.getElementById('clearHistory');
+    renderHistory();
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
       submit.disabled = true;
@@ -378,6 +405,8 @@ function indexHtml() {
         const response = await fetch('/api/parse?text=' + encodeURIComponent(text.value));
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.detail || '解析失败');
+        saveHistory(payload, text.value);
+        renderHistory();
         result.innerHTML = render(payload);
       } catch (error) {
         result.innerHTML = '<div class="error">' + escapeHtml(error.message || String(error)) + '</div>';
@@ -385,6 +414,27 @@ function indexHtml() {
         submit.disabled = false;
         submit.textContent = '解析图片';
       }
+    });
+    historyList.addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-action]');
+      if (!button) return;
+      const id = button.dataset.id;
+      const items = loadHistory();
+      const item = items.find((entry) => entry.id === id);
+      if (button.dataset.action === 'view' && item) {
+        text.value = item.input || item.data?.source_url || '';
+        result.innerHTML = render(item.data);
+        result.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      if (button.dataset.action === 'delete') {
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(items.filter((entry) => entry.id !== id)));
+        renderHistory();
+      }
+    });
+    clearHistory.addEventListener('click', () => {
+      localStorage.removeItem(HISTORY_KEY);
+      renderHistory();
+      result.innerHTML = '';
     });
     function render(data) {
       const images = data.images || [];
@@ -420,6 +470,55 @@ function indexHtml() {
     function renderMedia(image, livePhoto, sourceUrl, index) {
       if (!livePhoto || !livePhoto.video) return \`<img src="/api/image?url=\${encodeURIComponent(image)}&ref=\${encodeURIComponent(sourceUrl)}" alt="图片 \${index + 1}">\`;
       return \`<video controls muted playsinline poster="/api/image?url=\${encodeURIComponent(image)}&ref=\${encodeURIComponent(sourceUrl)}"><source src="/api/video?url=\${encodeURIComponent(livePhoto.video)}&ref=\${encodeURIComponent(sourceUrl)}" type="video/mp4"></video>\`;
+    }
+    function loadHistory() {
+      try {
+        const value = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+        return Array.isArray(value) ? value.filter((item) => item && item.data) : [];
+      } catch {
+        return [];
+      }
+    }
+    function saveHistory(data, input) {
+      const images = data.images || [];
+      const livePhotos = data.live_photos || [];
+      const videos = data.videos || [];
+      const key = data.note_id || data.source_url || String(Date.now());
+      const item = {
+        id: key,
+        input,
+        title: data.title || '未命名',
+        source_url: data.source_url || '',
+        saved_at: Date.now(),
+        counts: { images: images.length, live: livePhotos.length, videos: videos.length },
+        data,
+      };
+      const items = loadHistory().filter((entry) => entry.id !== item.id);
+      localStorage.setItem(HISTORY_KEY, JSON.stringify([item, ...items].slice(0, HISTORY_LIMIT)));
+    }
+    function renderHistory() {
+      const items = loadHistory();
+      clearHistory.disabled = !items.length;
+      if (!items.length) {
+        historyList.innerHTML = '<p class="history-empty">暂无历史记录</p>';
+        return;
+      }
+      historyList.innerHTML = items.map((item) => {
+        const counts = item.counts || {};
+        const time = new Date(item.saved_at || Date.now()).toLocaleString();
+        const summary = \`\${counts.images || 0} 张图\${counts.live ? \`，\${counts.live} 个实况\` : ''}\${counts.videos ? \`，\${counts.videos} 个视频\` : ''}\`;
+        return \`
+          <article class="history-item">
+            <div>
+              <p class="history-title">\${escapeHtml(item.title || '未命名')}</p>
+              <p class="history-meta">\${escapeHtml(summary)} · \${escapeHtml(time)}</p>
+            </div>
+            <div class="history-actions">
+              <button class="ghost" type="button" data-action="view" data-id="\${escapeHtml(item.id)}">查看</button>
+              <button class="danger" type="button" data-action="delete" data-id="\${escapeHtml(item.id)}">删除</button>
+            </div>
+          </article>\`;
+      }).join('');
     }
     function escapeHtml(value) {
       return String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
