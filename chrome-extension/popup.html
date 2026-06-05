@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>X 高清大图下载器</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>X 高清大图下载器</h1>
+      <button id="refresh" type="button">刷新</button>
+    </header>
+    <p id="status" class="status">正在识别当前页面图片...</p>
+    <section id="list" class="list"></section>
+    <footer>
+      <button id="downloadAll" type="button" disabled>下载全部高清图</button>
+    </footer>
+  </main>
+  <script src="media-utils.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

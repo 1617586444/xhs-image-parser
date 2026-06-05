@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "X 高清大图下载器",
+  "version": "0.1.0",
+  "description": "在 X/Twitter 页面识别 pbs.twimg.com/media 图片，并下载 name=orig 高清版本。",
+  "permissions": ["activeTab", "downloads"],
+  "host_permissions": [
+    "https://x.com/*",
+    "https://twitter.com/*",
+    "https://pbs.twimg.com/*"
+  ],
+  "action": {
+    "default_title": "X 高清大图下载器",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://x.com/*", "https://twitter.com/*"],
+      "js": ["media-utils.js", "content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

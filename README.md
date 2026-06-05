@@ -84,6 +84,32 @@ npm test
 python -m unittest discover -s tests -v
 ```
 
+## Chrome 插件：X 高清大图下载器
+
+仓库里的 `chrome-extension/` 是一个无需构建的 Chrome MV3 插件，用于在 X/Twitter 页面下载高清大图。
+
+安装方式：
+
+1. 打开 Chrome：`chrome://extensions/`
+2. 打开“开发者模式”
+3. 点击“加载已解压的扩展程序”
+4. 选择本仓库的 `chrome-extension/` 目录
+
+使用方式：
+
+1. 打开 X/Twitter 帖子页面
+2. 点击浏览器右上角的“X 高清大图下载器”
+3. 插件会识别当前页面里的 `pbs.twimg.com/media` 图片
+4. 点击“下载高清图”或“下载全部高清图”
+
+插件会把图片 URL 规范成 `name=orig`，例如：
+
+```text
+https://pbs.twimg.com/media/HJ-rnV3akAA23Vi.jpg?format=jpg&name=orig
+```
+
+插件只识别帖子媒体图，不下载头像、图标或 X 页面静态资源。
+
 ## 备用浏览器增强方案
 
 仓库仍保留旧的 FastAPI/Playwright 服务：
