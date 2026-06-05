@@ -14,7 +14,9 @@ import {
   filterXVideos,
   filterDetailImages,
   isAllowedMediaUrl,
+  normalizeXVideoUrl,
   pickBestXVideoVariant,
+  xDetailFromVxTwitter,
   xDetailFromSyndication,
 } from "../src/parser.js";
 
@@ -103,6 +105,35 @@ test("filterXVideos rejects non-post static asset videos", () => {
     ]),
     ["https://video.twimg.com/ext_tw_video/1/vid/1280x720/post.mp4?tag=10"],
   );
+});
+
+test("xDetailFromVxTwitter extracts media URLs", () => {
+  const detail = xDetailFromVxTwitter(
+    {
+      tweetID: "2062557742439502161",
+      tweetURL: "https://x.com/HoranicC/status/2062557742439502161",
+      text: "放松",
+      mediaURLs: ["https://pbs.twimg.com/media/HJ-rnV3akAA23Vi.jpg"],
+      media_extended: [
+        {
+          type: "image",
+          url: "https://pbs.twimg.com/media/HJ-rnV3akAA23Vi.jpg",
+          thumbnail_url: "https://pbs.twimg.com/media/HJ-rnV3akAA23Vi.jpg",
+        },
+      ],
+    },
+    "https://x.com/i/status/2062557742439502161",
+    "2062557742439502161",
+  );
+
+  assert.deepEqual(detail.images, ["https://pbs.twimg.com/media/HJ-rnV3akAA23Vi.jpg?format=jpg&name=orig"]);
+  assert.deepEqual(detail.videos, []);
+  assert.equal(detail.parser_source, "vxtwitter");
+});
+
+test("normalizeXVideoUrl accepts only video.twimg.com mp4", () => {
+  assert.equal(normalizeXVideoUrl("https://video.twimg.com/ext_tw_video/1/vid/720x720/a.mp4?tag=10"), "https://video.twimg.com/ext_tw_video/1/vid/720x720/a.mp4?tag=10");
+  assert.equal(normalizeXVideoUrl("https://abs.twimg.com/videos/grok-4-key-visual.mp4"), "");
 });
 
 test("index page includes history and media controls", () => {

@@ -60,6 +60,9 @@ export async function parseXPostUrl(rawUrl) {
   const syndicationDetail = await fetchXPostFromSyndication(postId, postUrl);
   if (syndicationDetail.images.length || syndicationDetail.videos.length) return syndicationDetail;
 
+  const thirdPartyDetail = await fetchXPostFromThirdParty(postId, postUrl);
+  if (thirdPartyDetail.images.length || thirdPartyDetail.videos.length) return thirdPartyDetail;
+
   const htmlDetail = await fetchXPostFromHtml(postUrl, postId);
   if (htmlDetail.images.length || htmlDetail.videos.length) return htmlDetail;
 
@@ -110,6 +113,35 @@ async function fetchXPostFromSyndication(postId, postUrl) {
   return xDetailFromSyndication(payload, postUrl, postId);
 }
 
+async function fetchXPostFromThirdParty(postId, postUrl) {
+  const apiUrls = [
+    `https://api.vxtwitter.com/Twitter/status/${encodeURIComponent(postId)}`,
+    `https://api.fxtwitter.com/status/${encodeURIComponent(postId)}`,
+  ];
+
+  for (const apiUrl of apiUrls) {
+    const response = await fetch(apiUrl, {
+      redirect: "follow",
+      headers: buildXHeaders(postUrl),
+    });
+    if (!response.ok) continue;
+
+    let payload;
+    try {
+      payload = await response.json();
+    } catch {
+      continue;
+    }
+
+    const detail = apiUrl.includes("vxtwitter")
+      ? xDetailFromVxTwitter(payload, postUrl, postId)
+      : xDetailFromFxTwitter(payload, postUrl, postId);
+    if (detail.images.length || detail.videos.length) return detail;
+  }
+
+  return emptyXDetail(postUrl, postId);
+}
+
 async function fetchXPostFromHtml(postUrl, postId) {
   const response = await fetch(postUrl, {
     redirect: "follow",
@@ -130,6 +162,81 @@ async function fetchXPostFromHtml(postUrl, postId) {
     live_photos: [],
     videos,
     source_type: "x",
+  };
+}
+
+export function xDetailFromVxTwitter(payload, postUrl, postId) {
+  const extended = Array.isArray(payload?.media_extended) ? payload.media_extended : [];
+  const mediaUrls = Array.isArray(payload?.mediaURLs) ? payload.mediaURLs : [];
+  const images = [];
+  const videos = [];
+
+  for (const item of extended) {
+    const type = String(item.type || "").toLowerCase();
+    if (type === "image" || type === "photo") {
+      const image = normalizeXImageUrl(item.url || item.thumbnail_url);
+      if (image) images.push(image);
+    }
+    if (type === "video" || type === "gif" || type === "animated_gif") {
+      const video = normalizeXVideoUrl(item.url || item.video_url);
+      if (video) videos.push(video);
+      const image = normalizeXImageUrl(item.thumbnail_url);
+      if (!video && image) images.push(image);
+    }
+  }
+
+  if (!images.length && !videos.length) {
+    for (const url of mediaUrls) {
+      const image = normalizeXImageUrl(url);
+      const video = normalizeXVideoUrl(url);
+      if (image) images.push(image);
+      if (video) videos.push(video);
+    }
+  }
+
+  return {
+    source_url: payload?.tweetURL || payload?.tweetUrl || postUrl,
+    note_id: String(payload?.tweetID || payload?.id || postId),
+    title: payload?.user_name ? `${payload.user_name} 的 X 帖子` : "X 帖子",
+    description: payload?.text || "",
+    images: [...new Set(images)],
+    live_photos: [],
+    videos: [...new Set(videos)],
+    source_type: "x",
+    parser_source: "vxtwitter",
+  };
+}
+
+export function xDetailFromFxTwitter(payload, postUrl, postId) {
+  const tweet = payload?.tweet || payload || {};
+  const media = tweet.media || {};
+  const photos = Array.isArray(media.photos) ? media.photos : [];
+  const videosData = Array.isArray(media.videos) ? media.videos : [];
+  const images = [];
+  const videos = [];
+
+  for (const photo of photos) {
+    const image = normalizeXImageUrl(photo.url || photo.media_url_https || photo.media_url);
+    if (image) images.push(image);
+  }
+
+  for (const video of videosData) {
+    const bestVideo = normalizeXVideoUrl(video.url || video.download_url || video.src);
+    if (bestVideo) videos.push(bestVideo);
+    const image = normalizeXImageUrl(video.thumbnail_url || video.thumbnail || video.poster);
+    if (!bestVideo && image) images.push(image);
+  }
+
+  return {
+    source_url: tweet.url || postUrl,
+    note_id: String(tweet.id || postId),
+    title: tweet.author?.name ? `${tweet.author.name} 的 X 帖子` : "X 帖子",
+    description: tweet.text || "",
+    images: [...new Set(images)],
+    live_photos: [],
+    videos: [...new Set(videos)],
+    source_type: "x",
+    parser_source: "fxtwitter",
   };
 }
 
@@ -313,14 +420,7 @@ export function filterXImages(items) {
 }
 
 export function filterXVideos(items) {
-  const videos = items.map((item) => String(item || "").replaceAll("\\/", "/")).filter((item) => {
-    try {
-      const parsed = new URL(item);
-      return parsed.hostname.toLowerCase() === "video.twimg.com" && parsed.pathname.toLowerCase().includes(".mp4");
-    } catch {
-      return false;
-    }
-  });
+  const videos = items.map(normalizeXVideoUrl).filter(Boolean);
   return [...new Set(videos)];
 }
 
@@ -334,6 +434,19 @@ export function normalizeXImageUrl(rawUrl) {
     if (!parsed.pathname.startsWith("/media/")) return "";
     parsed.searchParams.set("format", parsed.searchParams.get("format") || inferXImageFormat(parsed.pathname));
     parsed.searchParams.set("name", "orig");
+    return parsed.toString();
+  } catch {
+    return "";
+  }
+}
+
+export function normalizeXVideoUrl(rawUrl) {
+  if (!rawUrl) return "";
+  const value = String(rawUrl).replaceAll("\\/", "/").replaceAll("&amp;", "&");
+  try {
+    const parsed = new URL(value);
+    if (parsed.hostname.toLowerCase() !== "video.twimg.com") return "";
+    if (!parsed.pathname.toLowerCase().includes(".mp4")) return "";
     return parsed.toString();
   } catch {
     return "";
