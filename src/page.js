@@ -4,7 +4,7 @@ export function indexHtml() {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>小红书静态解析</title>
+  <title>小红书 / X 静态解析</title>
   <style>
     body { margin: 0; font-family: "Segoe UI", "Microsoft YaHei", sans-serif; background: #07111f; color: #ebf3ff; }
     main { max-width: 1080px; margin: 0 auto; padding: 32px 16px 56px; }
@@ -41,9 +41,9 @@ export function indexHtml() {
 </head>
 <body>
   <main>
-    <h1>小红书静态图片解析</h1>
+    <h1>小红书 / X 图片视频解析</h1>
     <form id="form">
-      <textarea id="text" placeholder="粘贴小红书分享文本或链接"></textarea>
+      <textarea id="text" placeholder="粘贴小红书分享文本，或 X/Twitter 帖子链接"></textarea>
       <div class="form-actions">
         <button id="submit" type="submit">解析图片</button>
         <button id="detectClipboard" class="secondary" type="button">识别剪切板</button>
@@ -168,8 +168,8 @@ export function indexHtml() {
       if (silent && text.value.trim()) return;
       try {
         const clipboardText = await navigator.clipboard.readText();
-        if (!looksLikeXhsText(clipboardText)) {
-          if (!silent) showError('剪切板里没有识别到小红书链接。');
+        if (!looksLikeSupportedText(clipboardText)) {
+          if (!silent) showError('剪切板里没有识别到小红书或 X 链接。');
           return;
         }
         text.value = clipboardText.trim();
@@ -177,8 +177,8 @@ export function indexHtml() {
         if (!silent) showError('浏览器阻止了剪切板读取，请允许权限后重试。');
       }
     }
-    function looksLikeXhsText(value) {
-      return /xhslink\\.com|xiaohongshu\\.com/i.test(String(value || ''));
+    function looksLikeSupportedText(value) {
+      return /xhslink\\.com|xiaohongshu\\.com|x\\.com|twitter\\.com/i.test(String(value || ''));
     }
     function showError(message) {
       result.innerHTML = '<div class="error">' + escapeHtml(message) + '</div>';

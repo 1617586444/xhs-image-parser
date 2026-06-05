@@ -3,6 +3,7 @@ export const USER_AGENT =
 
 const XHS_URL_RE = /https?:\/\/(?:www\.)?xiaohongshu\.com\/[^\s<>"'，。；！？】）)]+/i;
 const XHS_SHORT_URL_RE = /https?:\/\/(?:www\.)?xhslink\.com\/[^\s<>"'，。；！？】）)]+/i;
+const X_URL_RE = /https?:\/\/(?:www\.)?(?:x\.com|twitter\.com)\/[^\s<>"'，。；！？】）)]+/i;
 const SHARE_QUERY_KEYS = new Set([
   "app_platform",
   "app_version",
@@ -43,10 +44,143 @@ const BLOCKED_IMAGE_TOKENS = [
 
 export async function parseRequest(url) {
   const text = url.searchParams.get("text") || "";
-  if (!text.trim()) throw new Error("没有从输入中识别到小红书文章链接。");
+  if (!text.trim()) throw new Error("没有从输入中识别到可解析链接。");
+  const xUrl = extractXUrl(text);
+  if (xUrl) return parseXPostUrl(xUrl);
   const noteUrl = await resolveNoteUrl(text);
-  if (!noteUrl) throw new Error("没有从输入中识别到小红书文章链接。");
+  if (!noteUrl) throw new Error("没有从输入中识别到小红书或 X 链接。");
   return parseStaticNoteUrl(noteUrl);
+}
+
+export async function parseXPostUrl(rawUrl) {
+  const postUrl = canonicalizeXPostUrl(rawUrl);
+  const postId = extractXPostId(postUrl);
+  if (!postId) throw new Error("没有从输入中识别到 X 帖子 ID。");
+
+  const syndicationDetail = await fetchXPostFromSyndication(postId, postUrl);
+  if (syndicationDetail.images.length || syndicationDetail.videos.length) return syndicationDetail;
+
+  const htmlDetail = await fetchXPostFromHtml(postUrl, postId);
+  if (htmlDetail.images.length || htmlDetail.videos.length) return htmlDetail;
+
+  throw new Error("当前 X 页面没有可解析的公开图片或视频，可能需要登录或内容受限。");
+}
+
+export function extractXUrl(text) {
+  const match = text.match(X_URL_RE);
+  return match ? sanitizeExtractedUrl(match[0]) : "";
+}
+
+export function extractXPostId(rawUrl) {
+  try {
+    const parsed = new URL(rawUrl);
+    const segments = parsed.pathname.split("/").filter(Boolean);
+    const statusIndex = segments.findIndex((segment) => segment === "status" || segment === "statuses");
+    if (statusIndex >= 0 && segments[statusIndex + 1] && /^\d+$/.test(segments[statusIndex + 1])) {
+      return segments[statusIndex + 1];
+    }
+  } catch {
+    return "";
+  }
+  return "";
+}
+
+export function canonicalizeXPostUrl(rawUrl) {
+  const postId = extractXPostId(rawUrl);
+  if (!postId) return "";
+  const parsed = new URL(rawUrl);
+  const username = parsed.pathname.split("/").filter(Boolean)[0] || "i";
+  return `https://x.com/${username}/status/${postId}`;
+}
+
+async function fetchXPostFromSyndication(postId, postUrl) {
+  const apiUrl = `https://cdn.syndication.twimg.com/tweet-result?id=${encodeURIComponent(postId)}&lang=zh-cn`;
+  const response = await fetch(apiUrl, {
+    redirect: "follow",
+    headers: buildXHeaders(postUrl),
+  });
+  if (!response.ok) return emptyXDetail(postUrl, postId);
+
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    return emptyXDetail(postUrl, postId);
+  }
+  return xDetailFromSyndication(payload, postUrl, postId);
+}
+
+async function fetchXPostFromHtml(postUrl, postId) {
+  const response = await fetch(postUrl, {
+    redirect: "follow",
+    headers: buildXHeaders(postUrl),
+  });
+  if (!response.ok) return emptyXDetail(postUrl, postId);
+
+  const pageText = decodePageText(await response.text());
+  const urls = extractUrls(pageText);
+  const images = filterXImages(urls);
+  const videos = filterXVideos(urls);
+  return {
+    source_url: postUrl,
+    note_id: postId,
+    title: extractMetaContent(pageText, "og:title") || "X 帖子",
+    description: extractMetaContent(pageText, "og:description") || extractMetaContent(pageText, "description") || "",
+    images,
+    live_photos: [],
+    videos,
+    source_type: "x",
+  };
+}
+
+export function xDetailFromSyndication(payload, postUrl, postId) {
+  const mediaItems = Array.isArray(payload?.mediaDetails) ? payload.mediaDetails : [];
+  const images = [];
+  const videos = [];
+
+  for (const item of mediaItems) {
+    const image = normalizeXImageUrl(item.media_url_https || item.media_url || item.url);
+    if (image && item.type !== "video" && item.type !== "animated_gif") images.push(image);
+
+    const variants = item.video_info?.variants || item.videoInfo?.variants || [];
+    const bestVideo = pickBestXVideoVariant(variants);
+    if (bestVideo) videos.push(bestVideo);
+    if (!bestVideo && (item.type === "video" || item.type === "animated_gif") && image) images.push(image);
+  }
+
+  return {
+    source_url: postUrl,
+    note_id: postId,
+    title: payload?.user?.name ? `${payload.user.name} 的 X 帖子` : "X 帖子",
+    description: payload?.text || "",
+    images: [...new Set(images)],
+    live_photos: [],
+    videos: [...new Set(videos)],
+    source_type: "x",
+  };
+}
+
+function emptyXDetail(postUrl, postId) {
+  return {
+    source_url: postUrl,
+    note_id: postId,
+    title: "X 帖子",
+    description: "",
+    images: [],
+    live_photos: [],
+    videos: [],
+    source_type: "x",
+  };
+}
+
+function buildXHeaders(ref = "https://x.com") {
+  return {
+    "User-Agent": USER_AGENT,
+    Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,application/json,*/*;q=0.8",
+    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+    Referer: ref,
+    "Cache-Control": "no-cache",
+  };
 }
 
 export async function resolveNoteUrl(text) {
@@ -173,6 +307,60 @@ export function extractUrls(text) {
   return [...new Set(text.match(/https?:\/\/[^"'<>\s)]+/g) || [])];
 }
 
+export function filterXImages(items) {
+  const images = items.map(normalizeXImageUrl).filter(Boolean);
+  return [...new Set(images)];
+}
+
+export function filterXVideos(items) {
+  const videos = items.map((item) => String(item || "").replaceAll("\\/", "/")).filter((item) => {
+    try {
+      const parsed = new URL(item);
+      return parsed.hostname.toLowerCase().endsWith(".twimg.com") && parsed.pathname.toLowerCase().includes(".mp4");
+    } catch {
+      return false;
+    }
+  });
+  return [...new Set(videos)];
+}
+
+export function normalizeXImageUrl(rawUrl) {
+  if (!rawUrl) return "";
+  let value = String(rawUrl).replaceAll("\\/", "/").replaceAll("&amp;", "&");
+  try {
+    const parsed = new URL(value);
+    const hostname = parsed.hostname.toLowerCase();
+    if (hostname !== "pbs.twimg.com" && !hostname.endsWith(".twimg.com")) return "";
+    if (!parsed.pathname.startsWith("/media/")) return "";
+    parsed.searchParams.set("format", parsed.searchParams.get("format") || inferXImageFormat(parsed.pathname));
+    parsed.searchParams.set("name", "orig");
+    return parsed.toString();
+  } catch {
+    return "";
+  }
+}
+
+function inferXImageFormat(pathname) {
+  const extension = pathname.split(".").pop()?.toLowerCase();
+  if (["jpg", "jpeg", "png", "webp", "gif"].includes(extension || "")) return extension === "jpeg" ? "jpg" : extension;
+  return "jpg";
+}
+
+export function pickBestXVideoVariant(variants) {
+  let best = "";
+  let bestBitrate = -1;
+  for (const variant of variants || []) {
+    const url = variant.url || variant.src || "";
+    if (!url || !String(variant.content_type || variant.contentType || "video/mp4").includes("mp4")) continue;
+    const bitrate = Number(variant.bitrate || 0);
+    if (!best || bitrate > bestBitrate) {
+      best = url.replaceAll("\\/", "/").replaceAll("&amp;", "&");
+      bestBitrate = bitrate;
+    }
+  }
+  return best;
+}
+
 export function filterDetailImages(items) {
   const byKey = new Map();
   for (const item of items) {
@@ -249,15 +437,23 @@ export function videoIdentityKey(rawUrl) {
   }
 }
 
-export function isAllowedXhsMediaUrl(rawUrl) {
+export function isAllowedMediaUrl(rawUrl) {
   try {
     const parsed = new URL(rawUrl);
     const hostname = parsed.hostname.toLowerCase();
-    return ["http:", "https:"].includes(parsed.protocol) && (hostname === "xhscdn.com" || hostname.endsWith(".xhscdn.com"));
+    return (
+      ["http:", "https:"].includes(parsed.protocol) &&
+      (hostname === "xhscdn.com" ||
+        hostname.endsWith(".xhscdn.com") ||
+        hostname === "twimg.com" ||
+        hostname.endsWith(".twimg.com"))
+    );
   } catch {
     return false;
   }
 }
+
+export const isAllowedXhsMediaUrl = isAllowedMediaUrl;
 
 export function extractJsonFieldNearNote(text, noteId, field) {
   if (!noteId) return "";

@@ -1,4 +1,4 @@
-import { buildXhsHeaders, isAllowedXhsMediaUrl, parseRequest } from "./parser.js";
+import { buildXhsHeaders, isAllowedMediaUrl, parseRequest } from "./parser.js";
 import { indexHtml } from "./page.js";
 
 export default {
@@ -21,7 +21,7 @@ export default {
 async function proxyMedia(url, defaultType, attachment, prefix) {
   const mediaUrl = url.searchParams.get("url");
   if (!mediaUrl) return jsonResponse({ detail: "missing url" }, 400);
-  if (!isAllowedXhsMediaUrl(mediaUrl)) return jsonResponse({ detail: "media url is not allowed" }, 400);
+  if (!isAllowedMediaUrl(mediaUrl)) return jsonResponse({ detail: "media url is not allowed" }, 400);
 
   const ref = url.searchParams.get("ref") || "https://www.xiaohongshu.com";
   const response = await fetch(mediaUrl, {
