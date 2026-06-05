@@ -178,7 +178,7 @@ export function indexHtml() {
       }
     }
     function looksLikeXhsText(value) {
-      return /https?:\/\/(?:www\.)?(?:xhslink\.com|xiaohongshu\.com)\//i.test(String(value || ''));
+      return /xhslink\\.com|xiaohongshu\\.com/i.test(String(value || ''));
     }
     function showError(message) {
       result.innerHTML = '<div class="error">' + escapeHtml(message) + '</div>';

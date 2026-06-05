@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import vm from "node:vm";
 
 import worker from "../src/index.js";
 import { indexHtml } from "../src/page.js";
@@ -50,6 +51,14 @@ test("index page includes history and media controls", () => {
   assert.match(html, /navigator\.clipboard\.readText/);
   assert.match(html, /\/api\/download-image/);
   assert.match(html, /\/api\/download-video/);
+});
+
+test("index page inline script is valid JavaScript", () => {
+  const html = indexHtml();
+  const match = html.match(/<script>([\s\S]*?)<\/script>/);
+
+  assert.ok(match);
+  assert.doesNotThrow(() => new vm.Script(match[1]));
 });
 
 test("media allowlist accepts only Xiaohongshu CDN URLs", () => {
