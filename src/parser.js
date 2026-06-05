@@ -316,7 +316,7 @@ export function filterXVideos(items) {
   const videos = items.map((item) => String(item || "").replaceAll("\\/", "/")).filter((item) => {
     try {
       const parsed = new URL(item);
-      return parsed.hostname.toLowerCase().endsWith(".twimg.com") && parsed.pathname.toLowerCase().includes(".mp4");
+      return parsed.hostname.toLowerCase() === "video.twimg.com" && parsed.pathname.toLowerCase().includes(".mp4");
     } catch {
       return false;
     }

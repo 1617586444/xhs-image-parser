@@ -11,6 +11,7 @@ import {
   extractXUrl,
   extractXhsUrl,
   extractVideoUrls,
+  filterXVideos,
   filterDetailImages,
   isAllowedMediaUrl,
   pickBestXVideoVariant,
@@ -91,6 +92,16 @@ test("pickBestXVideoVariant ignores non-mp4 variants", () => {
       { content_type: "video/mp4", bitrate: 1, url: "https://video.twimg.com/a.mp4" },
     ]),
     "https://video.twimg.com/a.mp4",
+  );
+});
+
+test("filterXVideos rejects non-post static asset videos", () => {
+  assert.deepEqual(
+    filterXVideos([
+      "https://abs.twimg.com/videos/grok-4-key-visual.mp4",
+      "https://video.twimg.com/ext_tw_video/1/vid/1280x720/post.mp4?tag=10",
+    ]),
+    ["https://video.twimg.com/ext_tw_video/1/vid/1280x720/post.mp4?tag=10"],
   );
 });
 
