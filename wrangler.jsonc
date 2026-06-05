@@ -2,25 +2,10 @@
   "name": "xhs-image-parser",
   "main": "src/index.js",
   "compatibility_date": "2026-05-26",
-  "containers": [
-    {
-      "class_name": "XhsParserContainer",
-      "image": "./Dockerfile",
-      "max_instances": 3
-    }
-  ],
-  "durable_objects": {
-    "bindings": [
-      {
-        "class_name": "XhsParserContainer",
-        "name": "XHS_PARSER_CONTAINER"
-      }
-    ]
-  },
   "migrations": [
     {
-      "tag": "v1",
-      "new_sqlite_classes": ["XhsParserContainer"]
+      "tag": "v2",
+      "deleted_classes": ["XhsParserContainer"]
     }
   ]
 }
